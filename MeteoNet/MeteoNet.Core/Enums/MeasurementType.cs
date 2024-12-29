@@ -1,12 +1,13 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿namespace MeteoNet.Core.Enums;
 
-namespace MeteoNet.Core.Enums
+public enum MeasurementType
 {
-    internal class MeasurementType
-    {
-    }
+    Temperature,
+    Humidity,
+    WindSpeed,
+    WindDirection,
+    Pressure,
+    Precipitation,
+    ChemicalComposition,
+    Cloudiness
 }

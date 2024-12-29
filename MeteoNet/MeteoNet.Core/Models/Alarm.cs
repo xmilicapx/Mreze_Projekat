@@ -1,12 +1,12 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using MeteoNet.Core.Enums;
 
-namespace MeteoNet.Core.Models
+namespace MeteoNet.Core.Models;
+
+[Serializable]
+public class Alarm
 {
-    internal class Alarm
-    {
-    }
+    public AlarmType Type { get; set; }
+    public double Value { get; set; }
+    public string Cause { get; set; } = string.Empty;
+    public DateTime Timestamp { get; set; }
 }

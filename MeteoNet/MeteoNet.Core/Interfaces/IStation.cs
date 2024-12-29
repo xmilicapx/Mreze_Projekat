@@ -1,12 +1,13 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using MeteoNet.Core.Models;
+using System.Diagnostics.Metrics;
 
-namespace MeteoNet.Core.Interfaces
+namespace MeteoNet.Core.Interfaces;
+
+public interface IStation
 {
-    internal interface IStation
-    {
-    }
+    void InitializeAsync(string name, Coordinates coordinates, int population, int deviceCount);
+    void SendMeasurementAsync(Measurement measurement);
+    void RaiseAlarmAsync(Alarm alarm);
+    IEnumerable<Measurement> GetMeasurementsAsync();
+    IEnumerable<Alarm> GetActiveAlarmsAsync();
 }

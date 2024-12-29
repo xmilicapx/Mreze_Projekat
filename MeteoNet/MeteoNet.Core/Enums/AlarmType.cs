@@ -1,12 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿namespace MeteoNet.Core.Enums;
 
-namespace MeteoNet.Core.Enums
+public enum AlarmType
 {
-    internal class AlarmType
-    {
-    }
+    HighTemperature,
+    LowTemperature,
+    HighWindSpeed,
+    HighChemicalConcentration,
+    ExcessivePrecipitation,
+    SystemMalfunction
 }

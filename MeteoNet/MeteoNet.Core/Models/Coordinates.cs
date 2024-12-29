@@ -1,12 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿namespace MeteoNet.Core.Models;
 
-namespace MeteoNet.Core.Models
-{
-    internal class Coordinates
-    {
-    }
-}
+[Serializable]
+public record Coordinates(double Latitude, double Longitude);
