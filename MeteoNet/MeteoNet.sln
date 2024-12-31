@@ -5,6 +5,8 @@ VisualStudioVersion = 17.9.34902.65
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MeteoNet.Core", "MeteoNet.Core\MeteoNet.Core.csproj", "{9DCAEA30-AF49-4E28-A357-8D8185476094}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MeteoNet.Device", "MeteoNet.Device\MeteoNet.Device.csproj", "{1363A55B-89A4-40E4-AA80-F3ED4974BCE9}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,10 @@ Global
 		{9DCAEA30-AF49-4E28-A357-8D8185476094}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9DCAEA30-AF49-4E28-A357-8D8185476094}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9DCAEA30-AF49-4E28-A357-8D8185476094}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1363A55B-89A4-40E4-AA80-F3ED4974BCE9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1363A55B-89A4-40E4-AA80-F3ED4974BCE9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1363A55B-89A4-40E4-AA80-F3ED4974BCE9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1363A55B-89A4-40E4-AA80-F3ED4974BCE9}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
