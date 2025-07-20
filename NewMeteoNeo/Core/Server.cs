@@ -11,6 +11,7 @@ namespace Core
         {
             try
             {
+                // Serialize the data
                 byte[] serializedData;
                 using (var ms = new MemoryStream())
                 {
@@ -19,6 +20,11 @@ namespace Core
                     serializedData = ms.ToArray();
                 }
 
+                // Send the length of the message first
+                byte[] lengthPrefix = BitConverter.GetBytes(serializedData.Length);
+                socket.Send(lengthPrefix);
+
+                // Send the actual message
                 socket.Send(serializedData);
             }
             catch (Exception ex)
@@ -27,6 +33,48 @@ namespace Core
             }
         }
 
+        public static T ReceiveMessage<T>(Socket socket)
+        {
+            try
+            {
+                // Receive the length prefix
+                byte[] lengthBytes = new byte[4];
+                int totalReceived = 0;
+                while (totalReceived < 4)
+                {
+                    int received = socket.Receive(lengthBytes, totalReceived, 4 - totalReceived, SocketFlags.None);
+                    if (received == 0)
+                        throw new Exception("Connection closed by remote host");
+                    totalReceived += received;
+                }
+
+                int messageLength = BitConverter.ToInt32(lengthBytes, 0);
+
+                // Receive the actual message
+                byte[] messageBytes = new byte[messageLength];
+                totalReceived = 0;
+                while (totalReceived < messageLength)
+                {
+                    int received = socket.Receive(messageBytes, totalReceived, messageLength - totalReceived, SocketFlags.None);
+                    if (received == 0)
+                        throw new Exception("Connection closed by remote host");
+                    totalReceived += received;
+                }
+
+                // Deserialize the message
+                using (var ms = new MemoryStream(messageBytes))
+                {
+                    var bf = new BinaryFormatter();
+                    return (T)bf.Deserialize(ms);
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Failed to receive message: {ex.Message}", ex);
+            }
+        }
+
+        // Keep this method for UDP messages which are self-contained
         public static T DeserializeObject<T>(byte[] data)
         {
             using (var ms = new MemoryStream(data))

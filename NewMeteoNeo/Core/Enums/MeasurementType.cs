@@ -1,12 +1,14 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace Core.Enums
+﻿namespace Core.Enums
 {
-    internal class MeasurementType
+    public enum MeasurementType
     {
+        Temperature,
+        Humidity,
+        WindSpeed,
+        WindDirection,
+        Pressure,
+        Precipitation,
+        ChemicalComposition,
+        Cloudiness
     }
 }

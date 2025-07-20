@@ -1,7 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using Core;
 using Core.Models;
@@ -10,122 +11,144 @@ namespace Station
 {
     internal class Program
     {
-        private const int ServerPort = 51000;
-        private const int UdpPort = 15000;
+        private const int SERVER_PORT = 10000;
+        private const string SERVER_IP = "127.0.0.1";
         private static Socket _tcpSocket;
         private static Socket _udpSocket;
-        private static Core.Models.Station _stationData;
+        private static List<Measurement> _measurements = new List<Measurement>();
+        private static List<Alarm> _activeAlarms = new List<Alarm>();
+        private static Core.Models.Station _stationInfo;
 
         public static void Main(string[] args)
         {
-            InitializeStation();
+            Console.WriteLine("Enter station port (15000-15002):");
+            int stationPort;
+            while (!int.TryParse(Console.ReadLine(), out stationPort) ||
+                   stationPort < 15000 || stationPort > 15002)
+            {
+                Console.WriteLine("Invalid port. Please enter a port between 15000-15002:");
+            }
 
-            // Start device communication in a separate thread
-            var deviceThread = new Thread(StartDeviceCommunication);
-            deviceThread.Start();
-
-            Console.WriteLine("Press Enter to exit.");
-            Console.ReadLine();
+            InitializeStation(stationPort);
+            StartStation();
         }
 
-        private static void InitializeStation()
+        private static void InitializeStation(int udpPort)
         {
             try
             {
                 // Initialize TCP connection to server
-                _tcpSocket = new Socket(
-                    AddressFamily.InterNetwork,
-                    SocketType.Stream,
-                    ProtocolType.Tcp
-                );
+                _tcpSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                _tcpSocket.Connect(new IPEndPoint(IPAddress.Parse(SERVER_IP), SERVER_PORT));
 
-                // Connect to server
-                var serverEndPoint = new IPEndPoint(IPAddress.Parse("127.0.0.1"), ServerPort);
-                Console.WriteLine("Connecting to server...");
-                _tcpSocket.Connect(serverEndPoint);
-                Console.WriteLine("Connected to server!");
+                // Initialize UDP listener for devices
+                _udpSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+                _udpSocket.Bind(new IPEndPoint(IPAddress.Any, udpPort));
 
-                // Receive initialization data
-                var buffer = new byte[2048];
-                _tcpSocket.Receive(buffer);
-                _stationData = NetworkHelper.DeserializeObject<Core.Models.Station>(buffer);
+                // Get station info from server using the new method
+                _stationInfo = NetworkHelper.ReceiveMessage<Core.Models.Station>(_tcpSocket);
 
-                Console.WriteLine($"Initialized as station: {_stationData.Name}");
-                Console.WriteLine($"Population: {_stationData.Population}");
-                Console.WriteLine($"Device count: {_stationData.DeviceCount}");
-                Console.WriteLine($"Location: {_stationData.Coordinates.Latitude}, {_stationData.Coordinates.Longitude}");
-
-                // Initialize UDP socket for device communication
-                _udpSocket = new Socket(
-                    AddressFamily.InterNetwork,
-                    SocketType.Dgram,
-                    ProtocolType.Udp
-                );
-
-                var localEndPoint = new IPEndPoint(IPAddress.Any, UdpPort);
-                _udpSocket.Bind(localEndPoint);
-                Console.WriteLine($"Listening for device connections on UDP port {UdpPort}");
+                Console.WriteLine($"Station initialized: {_stationInfo.Name}");
+                Console.WriteLine($"Listening for devices on UDP port {udpPort}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Station initialization error: {ex.Message}");
-                _tcpSocket?.Close();
-                _udpSocket?.Close();
-                throw; // Re-throw to exit the application
+                Console.WriteLine($"Initialization error: {ex.Message}");
+                Environment.Exit(1);
             }
         }
 
-        private static void SendMeasurementsToServer(Socket serverSocket, List<Measurement> measurements)
+        private static void StartStation()
         {
-            try
-            {
-                NetworkHelper.SendMessage(serverSocket, measurements);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error sending measurements: {ex.Message}");
-            }
+            // Start device listener thread
+            var deviceThread = new Thread(ListenForDevices);
+            deviceThread.Start();
+
+            // Start server communication thread
+            var serverThread = new Thread(CommunicateWithServer);
+            serverThread.Start();
+
+            Console.WriteLine("Press Enter to exit...");
+            Console.ReadLine();
+
+            _tcpSocket?.Close();
+            _udpSocket?.Close();
         }
 
-        private static void StartDeviceCommunication()
+        private static void ListenForDevices()
         {
-            var measurements = new List<Measurement>();
-            var lastSendTime = DateTime.Now;
+            var buffer = new byte[1024];
+            EndPoint remoteEP = new IPEndPoint(IPAddress.Any, 0);
 
             while (true)
             {
                 try
                 {
-                    var buffer = new byte[2048];
-                    EndPoint remoteEp = new IPEndPoint(IPAddress.Any, 0);
+                    int received = _udpSocket.ReceiveFrom(buffer, ref remoteEP);
+                    var data = buffer.Take(received).ToArray();
 
-                    // Non-blocking check for data
-                    if (_udpSocket.Poll(1000000, SelectMode.SelectRead)) // 1 second timeout
+                    // Try to deserialize as Measurement first
+                    try
                     {
-                        _udpSocket.ReceiveFrom(buffer, ref remoteEp);
-                        var measurement = NetworkHelper.DeserializeObject<Measurement>(buffer);
-                        measurements.Add(measurement);
-                        Console.WriteLine($"Received measurement from {measurement.DeviceId}:");
-                        Console.WriteLine($"Type: {measurement.Type}");
-                        Console.WriteLine($"Value: {measurement.Value} {measurement.Unit}");
-                        Console.WriteLine($"Time: {measurement.Timestamp}");
+                        var measurement = NetworkHelper.DeserializeObject<Measurement>(data);
+                        lock (_measurements)
+                        {
+                            _measurements.Add(measurement);
+                        }
+                        Console.WriteLine($"Received measurement from {measurement.DeviceId}: {measurement.Value}{measurement.Unit}");
                     }
-
-                    // Send measurements to server every 5 seconds
-                    if (measurements.Count > 0 && (DateTime.Now - lastSendTime).TotalSeconds >= 5)
+                    catch
                     {
-                        SendMeasurementsToServer(_tcpSocket, measurements);
-                        Console.WriteLine($"Sent {measurements.Count} measurements to server");
-                        measurements.Clear();
-                        lastSendTime = DateTime.Now;
+                        // If not a measurement, try as Alarm
+                        try
+                        {
+                            var alarm = NetworkHelper.DeserializeObject<Alarm>(data);
+                            lock (_activeAlarms)
+                            {
+                                _activeAlarms.Add(alarm);
+                            }
+                            Console.WriteLine($"Received alarm: {alarm.Cause}");
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Error processing data: {ex.Message}");
+                        }
                     }
-
-                    Thread.Sleep(1000); // Wait 1 second before next check
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Error in device communication: {ex.Message}");
-                    Thread.Sleep(5000); // Wait before retry
+                    Console.WriteLine($"Device listening error: {ex.Message}");
+                }
+            }
+        }
+
+        private static void CommunicateWithServer()
+        {
+            while (true)
+            {
+                try
+                {
+                    // Update station data
+                    lock (_measurements)
+                    {
+                        _stationInfo.Measurements = new List<Measurement>(_measurements);
+                        _measurements.Clear();
+                    }
+
+                    lock (_activeAlarms)
+                    {
+                        _stationInfo.ActiveAlarms = new List<Alarm>(_activeAlarms);
+                        _activeAlarms.Clear();
+                    }
+
+                    // Send to server
+                    NetworkHelper.SendMessage(_tcpSocket, _stationInfo);
+                    Thread.Sleep(1000); // Send update every second
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Server communication error: {ex.Message}");
+                    break;
                 }
             }
         }

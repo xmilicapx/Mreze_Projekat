@@ -1,12 +1,15 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using Core.Enums;
 
 namespace Core.Models
 {
-    internal class Measurementcs
+    [Serializable]
+    public class Measurement
     {
+        public string DeviceId { get; set; } = string.Empty;
+        public MeasurementType Type { get; set; }
+        public double Value { get; set; }
+        public string Unit { get; set; } = string.Empty;
+        public DateTime Timestamp { get; set; }
     }
 }

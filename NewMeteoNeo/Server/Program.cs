@@ -1,126 +1,170 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using Core;
 using Core.Models;
-using static System.Collections.Specialized.BitVector32;
 
 namespace Server
 {
     internal class Program
     {
-        private const int Port = 51000;
-        private const int MaxClients = 10;
-        private static List<Socket> _clientSockets;
-        private static Socket _listenSocket;
+        private const int SERVER_PORT = 10000;
+        private static Socket _tcpSocket;
+        private static List<Socket> _stationSockets = new List<Socket>();
+        private static Dictionary<Socket, Station> _stations = new Dictionary<Socket, Station>();
 
         public static void Main(string[] args)
         {
-            _clientSockets = new List<Socket>();
+            InitializeServer();
             StartServer();
+        }
+
+        private static void InitializeServer()
+        {
+            try
+            {
+                _tcpSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                _tcpSocket.Bind(new IPEndPoint(IPAddress.Any, SERVER_PORT));
+                _tcpSocket.Listen(10);
+                Console.WriteLine($"Server started on port {SERVER_PORT}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Server initialization error: {ex.Message}");
+                Environment.Exit(1);
+            }
         }
 
         private static void StartServer()
         {
-            try
+            // Start station listener thread
+            var listenerThread = new Thread(AcceptStations);
+            listenerThread.Start();
+
+            // Start data display thread
+            var displayThread = new Thread(DisplayData);
+            displayThread.Start();
+
+            Console.WriteLine("Press Enter to exit...");
+            Console.ReadLine();
+
+            foreach (var socket in _stationSockets)
             {
-                // Create TCP socket as per guide
-                _listenSocket = new Socket(
-                    AddressFamily.InterNetwork,  // IPv4
-                    SocketType.Stream,           // TCP
-                    ProtocolType.Tcp
-                );
-
-                // Bind to local endpoint
-                IPEndPoint endPoint = new IPEndPoint(IPAddress.Any, Port);
-                _listenSocket.Bind(endPoint);
-
-                // Start listening with backlog
-                _listenSocket.Listen(MaxClients);
-                Console.WriteLine($"Server started on port {Port}");
-
-                while (true)
-                {
-                    // Accept new connections
-                    var clientSocket = _listenSocket.Accept();
-                    _clientSockets.Add(clientSocket);
-                    Console.WriteLine($"Client connected: {clientSocket.RemoteEndPoint}");
-
-                    var station = new Station
-                    {
-                        Name = "Belgrade Station",
-                        Coordinates = new Coordinates(44.787197, 20.457273),
-                        Population = 1_700_000,
-                        DeviceCount = 3
-                    };
-
-                    // Send initialization data
-                    NetworkHelper.SendMessage(clientSocket, station);
-
-                    // Start handling client data in a separate thread
-                    var clientThread = new Thread(() => HandleClient(clientSocket));
-                    clientThread.Start();
-                }
+                socket?.Close();
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Server error: {ex.Message}");
-                if (_listenSocket != null)
-                {
-                    _listenSocket.Close();
-                }
-            }
+            _tcpSocket?.Close();
         }
 
-        private static void ProcessClientData(Socket clientSocket)
-        {
-            try
-            {
-                var buffer = new byte[4096]; // Larger buffer for measurement lists
-                var received = clientSocket.Receive(buffer);
-
-                if (received > 0)
-                {
-                    var measurements = NetworkHelper.DeserializeObject<List<Measurement>>(buffer);
-
-                    // Process and display measurements
-                    Console.WriteLine($"\nReceived {measurements.Count} measurements from station:");
-                    foreach (var measurement in measurements)
-                    {
-                        Console.WriteLine($"  {measurement.Type}: {measurement.Value:F2} {measurement.Unit} " +
-                                        $"(Device: {measurement.DeviceId}, Time: {measurement.Timestamp:HH:mm:ss})");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error processing client data: {ex.Message}");
-            }
-        }
-
-        private static void HandleClient(Socket clientSocket)
+        private static void AcceptStations()
         {
             while (true)
             {
                 try
                 {
-                    if (clientSocket.Poll(1000000, SelectMode.SelectRead)) // 1 second timeout
+                    Socket stationSocket = _tcpSocket.Accept();
+
+                    // Create new station info
+                    var station = new Station
                     {
-                        ProcessClientData(clientSocket);
+                        Name = $"Station_{_stationSockets.Count + 1}",
+                        Coordinates = new Coordinates(45.0 + _stationSockets.Count, 20.0),
+                        Population = 100000,
+                        DeviceCount = 5
+                    };
+
+                    // Send initial station info
+                    NetworkHelper.SendMessage(stationSocket, station);
+
+                    lock (_stations)
+                    {
+                        _stationSockets.Add(stationSocket);
+                        _stations.Add(stationSocket, station);
                     }
-                    Thread.Sleep(1000); // Wait 1 second before next check
+
+                    // Start receiving data from this station
+                    var stationThread = new Thread(() => ReceiveStationData(stationSocket));
+                    stationThread.Start();
+
+                    Console.WriteLine($"New station connected: {station.Name}");
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Error handling client: {ex.Message}");
+                    Console.WriteLine($"Error accepting station: {ex.Message}");
+                }
+            }
+        }
+
+        private static void ReceiveStationData(Socket stationSocket)
+        {
+            while (true)
+            {
+                try
+                {
+                    var updatedStation = NetworkHelper.ReceiveMessage<Station>(stationSocket);
+
+                    lock (_stations)
+                    {
+                        if (_stations.ContainsKey(stationSocket))
+                        {
+                            _stations[stationSocket] = updatedStation;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error receiving station data: {ex.Message}");
                     break;
                 }
             }
 
-            clientSocket.Close();
-            Console.WriteLine("Client disconnected");
+            // Clean up disconnected station
+            lock (_stations)
+            {
+                _stations.Remove(stationSocket);
+                _stationSockets.Remove(stationSocket);
+            }
+            stationSocket.Close();
+        }
+
+        private static void DisplayData()
+        {
+            while (true)
+            {
+                Console.Clear();
+                Console.WriteLine("\n=== METEOROLOGICAL STATION NETWORK STATUS ===\n");
+                Console.WriteLine($"Active Stations: {_stations.Count}\n");
+
+                lock (_stations)
+                {
+                    foreach (var station in _stations.Values)
+                    {
+                        Console.WriteLine($"=== {station.Name} ===");
+                        Console.WriteLine($"Location: {station.Coordinates.Latitude:F2}°N, {station.Coordinates.Longitude:F2}°E");
+                        Console.WriteLine($"Population: {station.Population:N0}");
+                        Console.WriteLine("Recent Measurements:");
+
+                        foreach (var measurement in station.Measurements)
+                        {
+                            Console.WriteLine($"- {measurement.DeviceId}: {measurement.Value}{measurement.Unit}");
+                        }
+
+                        if (station.ActiveAlarms.Any())
+                        {
+                            Console.WriteLine("\nACTIVE ALARMS:");
+                            foreach (var alarm in station.ActiveAlarms)
+                            {
+                                Console.WriteLine($"!!! {alarm.Cause} !!!");
+                            }
+                        }
+                        Console.WriteLine();
+                    }
+                }
+
+                Thread.Sleep(1000); // Update display every second
+            }
         }
     }
 }

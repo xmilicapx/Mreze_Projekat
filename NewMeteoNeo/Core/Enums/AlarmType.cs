@@ -1,12 +1,17 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace Core.Enums
+﻿namespace Core.Enums
 {
-    internal class AlarmType
+    public enum AlarmType
     {
+        HighTemperature,
+        LowTemperature,
+        HighWindSpeed,
+        HighChemicalConcentration,
+        LowChemicalConcentration,
+        ExcessivePrecipitation,
+        HighHumidity,
+        LowHumidity,
+        HighPressure,
+        LowPressure,
+        HighCloudiness
     }
 }

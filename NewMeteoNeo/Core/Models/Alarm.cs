@@ -1,12 +1,14 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using Core.Enums;
 
 namespace Core.Models
 {
-    internal class Alarm
+    [Serializable]
+    public class Alarm
     {
+        public AlarmType Type { get; set; }
+        public double Value { get; set; }
+        public string Cause { get; set; } = string.Empty;
+        public DateTime Timestamp { get; set; }
     }
 }
